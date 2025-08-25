@@ -1,0 +1,335 @@
+---
+title: "bootcamp"
+format:
+  html:
+    toc: true
+    number_sections: true
+    toc_float: true
+    df_print: paged
+    embed-resources: true
+    self-contained: true
+
+execute:
+  echo: true
+  warning: false
+---
+
+# 課題１
+
+## 1. 課題の概要
+
+移民に関する連邦議会での演説に関して、国ごとの言及回数を集計すること
+
+## 2. コード
+
+### 2.1. quantedaを使用したVer
+
+```{r, include = FALSE}
+# step1 : ライブラリの読み込み
+library(quanteda)
+library(readtext)
+library(spacyr)
+library(quanteda.corpora)
+library(tidyverse)
+library(rlist)
+library(jsonlite)
+library(purrr)
+library(ggplot2)
+
+# step1 : 国コードの読み込み
+countries <- list(
+  Ireland = c("Ireland"),
+  Germany = c("Germany"),
+  Mexico = c("Mexico"),
+  Italy = c("Italy"),
+  England = c("England"),
+  Canada = c("Canada"),
+  Russia = c("Russia", "USSR"),
+  Poland = c("Poland"),
+  China = c("China"),
+  India = c("India"),
+  Sweden = c("Sweden"),
+  Austria = c("Austria"),
+  Philippines = c("Philippines", "Philippine"),
+  Cuba = c("Cuba"),
+  Hungary = c("Hungary"),
+  Norway = c("Norway"),
+  Czechoslovakia = c("Czechoslovakia", "Czech", "Slovakia", "Slovak"),
+  Vietnam = c("Vietnam"),
+  Scotland = c("Scotland"),
+  `El Salvador` = c("El Salvador"),
+  Korea = c("Korea"),
+  France = c("France"),
+  `Dominican Republic` = c("Dominican"),
+  Guatemala = c("Guatemala"),
+  Greece = c("Greece"),
+  Colombia = c("Colombia"),
+  Jamaica = c("Jamaica"),
+  Yugoslavia = c("Yugoslavia", "Serbia", "Croatia", "Macedonia", "Bosnia", "Herzegovina", "Montenegro"),
+  Honduras = c("Honduras"),
+  Japan = c("Japan"),
+  Haiti = c("Haiti"),
+  Portugal = c("Portugal"),
+  Denmark = c("Denmark"),
+  Lithuania = c("Lithuania"),
+  Switzerland = c("Switzerland"),
+  Wales = c("Wales"),
+  Taiwan = c("Taiwan"),
+  Netherlands = c("Netherlands", "Holland"),
+  Brazil = c("Brazil"),
+  Finland = c("Finland"),
+  Iran = c("Iran"),
+  Ecuador = c("Ecuador"),
+  Venezuela = c("Venezuela"),
+  Romania = c("Romania", "Rumania", "Roumania"),
+  Peru = c("Peru")
+)
+```
+
+```{r, include = TRUE}
+# countriesは国名の辞書形式オブジェクト
+
+
+# 辞書形式に変換
+mention_dict <- quanteda::dictionary(countries)
+
+# データの読み込み
+filepath <- "D:/git-project/data/raw/data/speeches/Congress/imm_segments_with_tone_and_metadata.jsonlist"
+
+read_jsonlist_stream <- function(filepath) {
+  con <- file(filepath, "r")  # ファイルを読み込みモードで開く
+  on.exit(close(con))        # 関数終了時にファイルを閉じる
+  
+  # stream_inはデフォルトでJSONL形式（1行に1つのJSONオブジェクト）を読み込む
+  data <- stream_in(con, verbose = FALSE)
+  
+  return(data)
+}
+
+list_speech <- read_jsonlist_stream(filepath)
+```
+
+#### Findings
+
+-   json listの読み込み
+
+    -   関数を知らなかった
+
+    -   検索が難しかった
+
+-   dictionary化
+
+    -   関数を知らなかった
+
+    -   反省点：quantedaの説明書を読み込まずに手を動かし始めてしまった
+
+```{r}
+
+# json listをデータフレーム化
+df_speech <- tibble(list_speech)
+df_speech <- bind_rows(list_speech)
+
+# テキストをすべて小文字化
+df_speech_low <- df_speech |>
+  mutate(text_low = str_to_lower(text))
+
+# IDの付与
+df_speech_low <- df_speech_low |>
+  mutate(doc_id = 1:nrow(df_speech_low))
+
+# コーパス化
+speech_corpus <- quanteda::corpus(
+  df_speech_low,
+  docid_field = "doc_id",
+  text_field = "text_low"
+)
+
+# テキストの集計とDFM(Document-Feature Matrix)化
+mentions_dfm <- quanteda::tokens(speech_corpus) |>
+  quanteda::tokens_lookup(mention_dict) |>
+  quanteda::dfm()
+
+# 集計したものをjsonファイルに書き出し
+imm_country_total_counts <- 
+  data.frame(quanteda::colSums(mentions_dfm)) |>
+  rename(counts = quanteda..colSums.mentions_dfm.)
+  
+write_json(imm_country_total_counts,
+           path = "D:/git-project/data/intermediate/imm_country_total_counts.json")
+```
+
+#### Findings
+
+-   小文字化
+
+    -   元のpythonコードでは大文字にフラグを立ててから小文字化させていたが、直接小文字化させた
+
+-   idの付与
+
+    -   idの付与を1から順に割り当てた。今回は問題がなかったが、分析によっては命名規則を作成して付与するのが良い
+
+        -   西暦、会期、政党、発言者などの情報をidに含める
+
+### 2.2. Appendix: quantedaを使わなかった場合
+
+-   辞書ではなくリストにしたことで、処理速度が遅くなった
+
+    -   特に、単語分割する部分が処理を重くしていた模様
+
+    -   コードをたくさん書く必要があった
+
+```{r, include = TRUE}
+# Load data ---------------------------------------------------------------
+# filepath <- "D:/git-project/data/raw/data/speeches/Congress/imm_segments_with_tone_and_metadata.jsonlist"
+# read_jsonlist <- function(filepath) {
+#   # 一行ずつ読み込み、各行をJSONとしてパースしてリストに格納
+#   lines <- readLines(filepath, warn = FALSE)
+#   parsed <- lapply(lines, fromJSON)
+#   return(parsed)
+# }
+# 
+# list_speech <- read_jsonlist(filepath)
+
+# Create data frame -------------------------------------------------------
+# df_speech <- tibble(list_speech)
+# df_speech <- bind_rows(list_speech)
+# head(df_speech)
+# 
+# countries_low <- map(countries, str_to_lower)
+# 
+# df_speech_low <- df_speech %>% 
+#   mutate(text_low = str_to_lower(text))
+
+
+# prepare dataframe ---------------------------------------------------
+# country_list <- str_to_lower(names(countries_low))
+# congress_range <- min(df_speech_low$congress) : max(df_speech_low$congress)
+# 
+# df_count_by_country <- matrix(0,
+#                               nrow = length(congress_range),
+#                               ncol = length(country_list),
+#                               dimnames = list(congress_range, country_list)) %>%
+#   as.data.frame()
+
+
+# count countries words ---------------------------------------------------
+# for (i in 1:nrow(df_speech_low)) {
+#   word_set <- unique(
+#     str_split(df_speech_low$text_low[i], pattern = " ")
+#   )
+#   for (j in 1:length(country_list)) {
+#     pattern_str <- paste(countries_low[[1]], collapse = "|")
+#     hits <- str_detect(word_set, pattern = pattern_str)
+#     if (any(hits)) {
+#       df_count_by_country[df_speech_low$congress[i] , j] + 1
+#     }
+#   }
+# }
+
+```
+
+### 2.3. Visualization
+
+```{r, fig.height=5}
+df_imm_counts <- fromJSON("D:/git-project/data/intermediate/imm_country_total_counts.json")
+
+df_imm_counts <- arrange(df_imm_counts, counts)
+
+df_imm_counts <- df_imm_counts |> 
+  mutate(country = rownames(df_imm_counts))
+
+df_imm_counts$country <- str_to_title(df_imm_counts$country)
+
+p1 <- df_imm_counts |>
+  tail(20) |>
+  ggplot(aes(x = counts, y = reorder(country, counts))) +
+  geom_col() + 
+  theme_bw() +
+  labs(x = "Number of Mentions", y = "", title = "Mentions of Immigration in the U.S. Congress Top 20(1880 - 2020)")
+p1
+
+```
+
+# 課題2
+
+## 1. 課題の概要
+
+### ゴール
+
+議会スピーチデータを読み込み、jsonlistに保存する。
+
+## 2. コード
+
+```{r}
+indir <- "D:/git-project/hein_bound_imm"
+outdir <- "D:/git-project/data/intermediate/hein_output"
+
+
+# ファイル一覧の取得
+descr_file_paths <- list.files(indir, pattern = "^descr.*\\.txt$", full.names = TRUE)
+
+# 全ファイルの読み込み
+descr_split <- map_dfr(descr_file_paths, function(file) {
+  lines <- readLines(file)  # 各行をベクトルとして読み込む
+  
+  tibble(text = lines) |>
+    mutate(file = basename(file)) |>
+    separate(text, into = as.character(c(1:15)), sep = "\\|")
+})
+
+
+# ファイル一覧の取得
+file_paths <- list.files(indir, pattern = "^speeches.*\\.txt$", full.names = TRUE)
+
+# 全ファイルの読み込み
+speeches_split <- map_dfr(file_paths, function(file) {
+  lines <- readLines(file)  # 各行をベクトルとして読み込む
+  
+  tibble(text = lines) |>
+    mutate(file = basename(file)) |>
+    separate(text, into = c("id", "text"), sep = "\\|")
+})
+
+
+speech_dates <- descr_split |>
+  select(
+    id = "1", 
+    date = "3")
+  
+df_speech <- 
+  left_join(speeches_split, speech_dates, by = "id")
+
+df_speech <- df_speech |>
+  filter(date != "18940614") 
+
+speech_corpus <- quanteda::corpus(
+  df_speech,
+  docid_field = "id",
+  text_field = "text"
+)
+
+sents <- tokens(speech_corpus, what = "sentence")
+tokens <- tokens(sents, what = "word")
+
+sents_characters <- lapply(sents, as.character)
+tokens_characters <- lapply(tokens, as.character)
+
+
+outlines <- list(
+  id = df_speech$id,
+  sents = sents_characters,
+  tokens = tokens_characters
+)
+
+# write_json(outlines, path =  paste0(outdir, "/speeches.jsonlist"))
+```
+
+#### Finding
+
+-   textファイルの読み込み
+
+    -   行単位での読み込みread_text()のオプションになかったため、readLines()を使用した
+
+-   列名の処理や命名は改善の余地あり
+
+    -   どのカラムがなにを意味しているのかをクリアにする
