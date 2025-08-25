@@ -41,12 +41,40 @@ list_speech <- read_jsonlist_stream(filepath)
 df_speech <- tibble(list_speech)
 df_speech <- bind_rows(list_speech)
 
+df_speech_low <- df_speech |>
+  mutate(text_low = str_to_lower(text))
 
-#IDの付与
-df_speech <- df_speech 
+# IDの付与
+df_speech_low <- df_speech_low |>
+  mutate(doc_id = 1:nrow(df_speech_low))
+
+# コーパス化
+speech_corpus <- quanteda::corpus(
+  df_speech_low,
+  docid_field = "doc_id",
+  text_field = "text_low"
+)
+
+
+# step3 -------------------------------------------------------------------
+mentions_dfm <- quanteda::tokens(speech_corpus) |>
+  quanteda::tokens_lookup(mention_dict) |>
+  quanteda::dfm()
 
 
 
+# step 4 ------------------------------------------------------------------
+imm_country_total_counts <- data.frame(quanteda::colSums(mentions_dfm))
+write_json(imm_country_total_counts,
+           path = "D:/git-project/data/intermediate/imm_country_total_counts.json")
+
+
+
+
+
+
+
+# Old coding --------------------------------------------------------------
 
 # Create data frame -------------------------------------------------------
 df_speech <- tibble(list_speech)
